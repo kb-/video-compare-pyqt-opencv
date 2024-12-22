@@ -1,0 +1,44 @@
+[project]
+name = "video-compare-pyqt-opencv"
+version = "0.1.0"
+description = "A video comparison application with side-by-side and overlay modes using PyQt6 and OpenCV."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "PyQt6>=6.5",  # PyQt6 for the GUI
+    "opencv-python>=4.8",  # OpenCV for video handling
+    "opencv-python-headless>=4.8",  # Optional for environments without GUI
+    "numpy>=1.24",  # Used internally by OpenCV
+]
+
+[project.optional-dependencies]
+dev = [
+    "flake8",  # Linter
+    "black",  # Code formatter
+    "mypy",  # Static type checker
+    "pytest",  # Testing framework
+    "pytest-qt",  # Testing for PyQt applications
+]
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503"]  # Compatibility with Black formatting
+exclude = ["build/", "dist/", ".venv/"]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["tests"]
+addopts = "-v"
+
+[tool.coverage.run]
+branch = true
+source = ["video_compare"]
+omit = ["tests/*", "setup.py"]
