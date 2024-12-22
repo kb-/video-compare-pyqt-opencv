@@ -200,6 +200,7 @@ class OverlayVideoLabel(QWidget):
                 event.ignore()
         else:
             self.dragging = False
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
             event.ignore()
 
     def mouseMoveEvent(self, event: QMouseEvent):
@@ -330,6 +331,8 @@ class OverlayVideoLabel(QWidget):
             self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
             event.accept()
         else:
+            self.dragging = False
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
             event.ignore()
 
 
@@ -346,6 +349,8 @@ class VideoCompareApp(QMainWindow):
         self.timer.timeout.connect(self.update_frames)
         self.is_paused = False
         self.is_overlay = False  # Flag for overlay mode
+        self.single_video_mode = False  # Flag for single video mode
+        self.seeking = False  # Flag to indicate if seeking is in progress
 
         # Setup UI
         self.init_ui()
@@ -473,31 +478,15 @@ class VideoCompareApp(QMainWindow):
 
         self.main_layout.addLayout(controls_layout)
 
-    # def resizeEvent(self, event):
-    #     super().resizeEvent(event)
-    #     # If videos are loaded and not in overlay mode, rescale the current frames
-    #     if self.cap1 and self.cap2 and not self.is_overlay:
-    #         # Get the current frame positions
-    #         pos1 = self.cap1.get(cv2.CAP_PROP_POS_FRAMES)
-    #         pos2 = self.cap2.get(cv2.CAP_PROP_POS_FRAMES)
-    #         self.cap1.set(cv2.CAP_PROP_POS_FRAMES, pos1)
-    #         self.cap2.set(cv2.CAP_PROP_POS_FRAMES, pos2)
-    #         ret1, frame1 = self.cap1.read()
-    #         ret2, frame2 = self.cap2.read()
-    #         if ret1 and ret2:
-    #             self.display_frame(frame1, self.video_label_1)
-    #             self.display_frame(frame2, self.video_label_2)
-    #         # Reset frame positions
-    #         self.cap1.set(cv2.CAP_PROP_POS_FRAMES, pos1)
-    #         self.cap2.set(cv2.CAP_PROP_POS_FRAMES, pos2)
+    # Removed resizeEvent as it's not essential and can cause performance issues
 
     def toggle_mode(self, state):
         if state == Qt.CheckState.Checked.value:
-            if not self.cap1 or not self.cap2:
+            if not self.cap1:
                 QMessageBox.warning(
                     self,
                     "Warning",
-                    "Please load both videos before switching to Overlay Mode.",
+                    "Please load at least one video before switching to Overlay Mode.",
                 )
                 self.mode_toggle.setChecked(False)
                 return
@@ -512,7 +501,7 @@ class VideoCompareApp(QMainWindow):
         self.display_initial_frames()
 
     def load_videos(self):
-        # Open file dialog to select first video
+        # Open file dialog to select the first video
         video1_path, _ = QFileDialog.getOpenFileName(
             self, "Select First Video", filter="Video Files (*.mp4 *.avi *.mkv *.mov)"
         )
@@ -520,16 +509,17 @@ class VideoCompareApp(QMainWindow):
             QMessageBox.warning(self, "Warning", "First video not selected.")
             return
 
-        # Open file dialog to select second video
+        # Open file dialog to select the second video (optional)
         video2_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Second Video", filter="Video Files (*.mp4 *.avi *.mkv *.mov)"
+            self, "Select Second Video (Optional)",
+            filter="Video Files (*.mp4 *.avi *.mkv *.mov)"
         )
-        if not video2_path:
-            QMessageBox.warning(self, "Warning", "Second video not selected.")
-            return
 
         print(f"Video 1: {video1_path}")
-        print(f"Video 2: {video2_path}")
+        if video2_path:
+            print(f"Video 2: {video2_path}")
+        else:
+            print("Video 2 not provided, using Video 1 for both sides.")
 
         # Release previous captures if any
         if self.cap1:
@@ -539,7 +529,10 @@ class VideoCompareApp(QMainWindow):
 
         # Initialize VideoCapture objects
         self.cap1 = cv2.VideoCapture(video1_path)
-        self.cap2 = cv2.VideoCapture(video2_path)
+        self.cap2 = cv2.VideoCapture(video2_path) if video2_path else None
+
+        # Set single-video mode flag
+        self.single_video_mode = self.cap2 is None
 
         # Check if videos opened successfully
         if not self.cap1.isOpened():
@@ -550,7 +543,7 @@ class VideoCompareApp(QMainWindow):
             )
             logging.error(f"Failed to open first video: {video1_path}")
             return
-        if not self.cap2.isOpened():
+        if not self.single_video_mode and not self.cap2.isOpened():
             QMessageBox.critical(
                 self,
                 "Error",
@@ -564,62 +557,98 @@ class VideoCompareApp(QMainWindow):
         self.frame_count1 = int(self.cap1.get(cv2.CAP_PROP_FRAME_COUNT))
         self.duration1 = self.frame_count1 / self.fps1 if self.fps1 else 0
 
-        self.fps2 = self.cap2.get(cv2.CAP_PROP_FPS)
-        self.frame_count2 = int(self.cap2.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.duration2 = self.frame_count2 / self.fps2 if self.fps2 else 0
+        if self.single_video_mode:
+            self.fps2 = self.fps1
+            self.frame_count2 = self.frame_count1
+            self.duration2 = self.duration1
+        else:
+            self.fps2 = self.cap2.get(cv2.CAP_PROP_FPS)
+            self.frame_count2 = int(self.cap2.get(cv2.CAP_PROP_FRAME_COUNT))
+            self.duration2 = self.frame_count2 / self.fps2 if self.fps2 else 0
 
-        # Retrieve frame sizes
-        width1 = int(self.cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height1 = int(self.cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        width2 = int(self.cap2.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height2 = int(self.cap2.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-        # Extract file names
+        # Update filename and metadata labels
         filename1 = os.path.basename(video1_path)
-        filename2 = os.path.basename(video2_path)
-
-        # Update filename labels
+        filename2 = os.path.basename(
+            video2_path) if video2_path else "N/A (Using Video 1)"
         self.filename_label_1.setText(f"Video 1 Filename: {filename1}")
         self.filename_label_2.setText(f"Video 2 Filename: {filename2}")
 
-        # Update metadata info labels
         self.info_label_1.setText(
-            f"Video 1 Info: Resolution: {width1}x{height1}, FPS: {self.fps1:.2f}, Duration: {self.duration1:.2f} sec"
+            f"Video 1 Info: Resolution: {int(self.cap1.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))}, FPS: {self.fps1:.2f}, Duration: {self.duration1:.2f} sec"
         )
-        self.info_label_2.setText(
-            f"Video 2 Info: Resolution: {width2}x{height2}, FPS: {self.fps2:.2f}, Duration: {self.duration2:.2f} sec"
-        )
+        if self.single_video_mode:
+            self.info_label_2.setText(
+                f"Video 2 Info: Resolution: {int(self.cap1.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))}, FPS: {self.fps2:.2f}, Duration: {self.duration2:.2f} sec (Split from Video 1)"
+            )
+        else:
+            self.info_label_2.setText(
+                f"Video 2 Info: Resolution: {int(self.cap2.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap2.get(cv2.CAP_PROP_FRAME_HEIGHT))}, FPS: {self.fps2:.2f}, Duration: {self.duration2:.2f} sec"
+            )
 
-        # Enable playback controls
+        # Enable playback controls and overlay toggle
         self.play_button.setEnabled(True)
         self.pause_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.seek_slider.setEnabled(True)
-
-        # Enable overlay toggle now that videos are loaded
         self.mode_toggle.setEnabled(True)
 
         # Set seekbar range based on the shorter duration
         self.duration = min(self.duration1, self.duration2)
-        self.seek_slider.setRange(0, int(self.duration * 1000))
+        self.seek_slider.setRange(0, int(self.duration * 1000))  # in milliseconds
         self.seek_slider.setValue(0)
-        print(f"Seekbar range set to 0 - {int(self.duration)} seconds")
 
         # Reset video positions to start
         self.cap1.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        self.cap2.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        if not self.single_video_mode:
+            self.cap2.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
         # Display first frames
         self.display_initial_frames()
 
     def display_initial_frames(self):
-        if not self.cap1 or not self.cap2:
-            print("Display Initial Frames: Video captures not initialized.")
+        if not self.cap1:
+            print("Display Initial Frames: Video capture not initialized.")
             return
-        ret1, frame1 = self.cap1.read()
-        ret2, frame2 = self.cap2.read()
 
-        if ret1 and ret2:
+        ret1, frame1 = self.cap1.read()
+
+        if not ret1 or frame1 is None:
+            print("Failed to read frame from the first video.")
+            return
+
+        # Handle single-video mode (no second video provided)
+        if self.single_video_mode:
+            height, width, _ = frame1.shape
+
+            if width < 2:  # Ensure the frame can be split
+                logging.error("Frame width too small to split.")
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    "Video frame width is too small to split for side-by-side comparison.",
+                )
+                self.stop_videos()
+                return
+
+            # Split the frame vertically into left and right halves
+            left_frame = frame1[:, :width // 2]  # Left half
+            right_frame = frame1[:, width // 2:]  # Right half
+
+            if self.is_overlay:
+                print("Setting frames for overlay mode.")
+                self.overlay_label.set_frames(left_frame, right_frame)
+            else:
+                print("Setting frames for side-by-side mode.")
+                self.display_frame(left_frame, self.video_label_1)
+                self.display_frame(right_frame, self.video_label_2)
+        else:
+            # Two videos are provided, read the first frame of the second video
+            ret2, frame2 = self.cap2.read()
+
+            if not ret2 or frame2 is None:
+                print("Failed to read frame from the second video.")
+                return
+
             if self.is_overlay:
                 print("Setting frames for overlay mode.")
                 self.overlay_label.set_frames(frame1, frame2)
@@ -627,12 +656,11 @@ class VideoCompareApp(QMainWindow):
                 print("Setting frames for side-by-side mode.")
                 self.display_frame(frame1, self.video_label_1)
                 self.display_frame(frame2, self.video_label_2)
-        else:
-            print("Failed to read frames from one or both videos.")
 
-        # Reset frame positions to start
+        # Reset frame position to the start for both videos
         self.cap1.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        self.cap2.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        if not self.single_video_mode:
+            self.cap2.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
     def display_frame(self, frame, label):
         try:
@@ -667,13 +695,19 @@ class VideoCompareApp(QMainWindow):
             )
 
     def play_videos(self):
-        if not self.cap1 or not self.cap2:
-            QMessageBox.warning(self, "Warning", "Please load both videos first.")
+        if not self.cap1:
+            QMessageBox.warning(self, "Warning", "Please load at least one video first.")
+            return
+
+        if not self.single_video_mode and not self.cap2:
+            QMessageBox.warning(self, "Warning", "Please load the second video or leave it empty.")
             return
 
         # Calculate interval based on FPS
         # Using the higher FPS to ensure smooth playback
-        combined_fps = max(self.fps1, self.fps2)
+        combined_fps = self.fps1
+        if not self.single_video_mode:
+            combined_fps = max(self.fps1, self.fps2)
         if combined_fps <= 0:
             QMessageBox.critical(
                 self, "Error", "Invalid FPS detected. Cannot start playback."
@@ -699,14 +733,15 @@ class VideoCompareApp(QMainWindow):
             print("Timer paused")
 
     def stop_videos(self):
-        if self.cap1 and self.cap2:
+        if self.cap1:
             self.timer.stop()
             self.is_paused = False
             print("Timer stopped and videos reset")
 
             # Reset frame positions to start
             self.cap1.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self.cap2.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            if not self.single_video_mode and self.cap2:
+                self.cap2.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
             # Display first frames
             self.display_initial_frames()
@@ -721,20 +756,26 @@ class VideoCompareApp(QMainWindow):
 
     def update_frames(self):
         try:
-            ret1, frame1 = self.cap1.read()
-            ret2, frame2 = self.cap2.read()
+            if self.single_video_mode:
+                ret1, frame1 = self.cap1.read()
+                if not ret1:
+                    print("End of Video 1 reached.")
+                    self.stop_videos()
+                    return
 
-            if ret1 and ret2:
+                height, width, _ = frame1.shape
+                left_frame = frame1[:, :width // 2]  # Left half
+                right_frame = frame1[:, width // 2:]  # Right half
+
                 if self.is_overlay:
-                    self.overlay_label.set_frames(frame1, frame2)
+                    self.overlay_label.set_frames(left_frame, right_frame)
                 else:
-                    self.display_frame(frame1, self.video_label_1)
-                    self.display_frame(frame2, self.video_label_2)
+                    self.display_frame(left_frame, self.video_label_1)
+                    self.display_frame(right_frame, self.video_label_2)
 
                 # Calculate current position in milliseconds
                 pos1 = self.cap1.get(cv2.CAP_PROP_POS_MSEC)
-                pos2 = self.cap2.get(cv2.CAP_PROP_POS_MSEC)
-                current_pos = min(pos1, pos2)
+                current_pos = pos1
                 print(f"Current playback position: {current_pos / 1000:.2f} seconds")
 
                 # Update seekbar without triggering the sliderMoved signal
@@ -742,13 +783,37 @@ class VideoCompareApp(QMainWindow):
                 self.seek_slider.setValue(int(current_pos))
                 self.seek_slider.blockSignals(False)
 
-                # Check if any video has ended
-                if (pos1 >= self.duration1 * 1000) or (pos2 >= self.duration2 * 1000):
+                # Check if video has ended
+                if pos1 >= self.duration1 * 1000:
                     self.stop_videos()
-
             else:
-                # If any video ends, stop playback
-                self.stop_videos()
+                ret1, frame1 = self.cap1.read()
+                ret2, frame2 = self.cap2.read()
+
+                if ret1 and ret2:
+                    if self.is_overlay:
+                        self.overlay_label.set_frames(frame1, frame2)
+                    else:
+                        self.display_frame(frame1, self.video_label_1)
+                        self.display_frame(frame2, self.video_label_2)
+
+                    # Calculate current position in milliseconds
+                    pos1 = self.cap1.get(cv2.CAP_PROP_POS_MSEC)
+                    pos2 = self.cap2.get(cv2.CAP_PROP_POS_MSEC)
+                    current_pos = min(pos1, pos2)
+                    print(f"Current playback position: {current_pos / 1000:.2f} seconds")
+
+                    # Update seekbar without triggering the sliderMoved signal
+                    self.seek_slider.blockSignals(True)
+                    self.seek_slider.setValue(int(current_pos))
+                    self.seek_slider.blockSignals(False)
+
+                    # Check if any video has ended
+                    if (pos1 >= self.duration1 * 1000) or (pos2 >= self.duration2 * 1000):
+                        self.stop_videos()
+                else:
+                    # If any video ends, stop playback
+                    self.stop_videos()
 
         except cv2.error as e:
             logging.error(f"OpenCV error during frame update: {e}")
@@ -768,22 +833,33 @@ class VideoCompareApp(QMainWindow):
     # Updated seekbar-related methods
     def seek_videos(self, position):
         try:
-            if self.cap1 and self.cap2:
+            if self.cap1:
                 print(f"Seekbar moved to position: {position / 1000} seconds")
                 # Set the position in milliseconds
                 self.cap1.set(cv2.CAP_PROP_POS_MSEC, position)
-                self.cap2.set(cv2.CAP_PROP_POS_MSEC, position)
+                if not self.single_video_mode and self.cap2:
+                    self.cap2.set(cv2.CAP_PROP_POS_MSEC, position)
 
                 # Read and display the frame at the new position
                 ret1, frame1 = self.cap1.read()
-                ret2, frame2 = self.cap2.read()
-
-                if ret1 and ret2:
-                    if self.is_overlay:
-                        self.overlay_label.set_frames(frame1, frame2)
-                    else:
-                        self.display_frame(frame1, self.video_label_1)
-                        self.display_frame(frame2, self.video_label_2)
+                if self.single_video_mode:
+                    if ret1 and frame1 is not None:
+                        height, width, _ = frame1.shape
+                        left_frame = frame1[:, :width // 2]
+                        right_frame = frame1[:, width // 2:]
+                        if self.is_overlay:
+                            self.overlay_label.set_frames(left_frame, right_frame)
+                        else:
+                            self.display_frame(left_frame, self.video_label_1)
+                            self.display_frame(right_frame, self.video_label_2)
+                else:
+                    ret2, frame2 = self.cap2.read()
+                    if ret1 and ret2 and frame1 is not None and frame2 is not None:
+                        if self.is_overlay:
+                            self.overlay_label.set_frames(frame1, frame2)
+                        else:
+                            self.display_frame(frame1, self.video_label_1)
+                            self.display_frame(frame2, self.video_label_2)
 
         except cv2.error as e:
             logging.error(f"OpenCV error during seeking: {e}")
