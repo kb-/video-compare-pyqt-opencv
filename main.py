@@ -1,3 +1,24 @@
+"""Video Comparison Application with PyQt6 and OpenCV.
+
+This application provides an interface for comparing two videos side-by-side
+or in overlay mode. Users can load one or two videos, toggle between comparison
+modes, and control playback with options like play, pause, seek, and stop.
+
+Modules:
+    - cv2: For handling video frames.
+    - PyQt6: For building the graphical user interface.
+    - logging: For logging errors and debugging information.
+
+Usage:
+    Run the script to launch the application. Load one or two videos and use
+    the provided controls for playback and comparison.
+
+Classes:
+    - OverlayVideoLabel: Custom widget for displaying overlayed video frames.
+    - VideoCompareApp: Main application class managing the UI and video playback.
+
+"""
+
 import logging  # For logging exceptions
 import os  # For file name extraction
 import sys
@@ -29,9 +50,34 @@ logging.basicConfig(
 
 
 class OverlayVideoLabel(QWidget):
+    """Custom widget for displaying two video frames in overlay mode.
+
+    This widget supports splitting the display into two sections, with a draggable
+    divider that adjusts the proportion of each frame visible. The user can
+    interactively drag the divider to adjust the comparison.
+
+    Attributes:
+        frame1: The first video frame (numpy array in BGR format).
+        frame2: The second video frame (numpy array in BGR format).
+        division: Float value (0.0 to 1.0) indicating the position of the divider.
+        dragging: Boolean indicating whether the divider is currently being dragged.
+        handle_width: Integer specifying the width of the draggable area around the
+        divider.
+
+    Signals:
+        divisionChanged: Emitted when the divider's position is changed.
+
+    """
+
     divisionChanged = pyqtSignal(float)  # Signal to emit when division changes
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
+        """Initialize the overlay video label widget.
+
+        Args:
+            parent: The parent widget, if any.
+
+        """
         super().__init__(parent)
         self.frame1 = None
         self.frame2 = None
@@ -43,16 +89,36 @@ class OverlayVideoLabel(QWidget):
         self.handle_width = 10  # Width of the draggable area around the divider
 
     def set_frames(self, frame1, frame2) -> None:
+        """Set the frames for overlay display and update the widget.
+
+        Args:
+            frame1: First video frame (numpy array in BGR format).
+            frame2: Second video frame (numpy array in BGR format).
+
+        """
         self.frame1 = frame1
         self.frame2 = frame2
         print("OverlayVideoLabel: Frames set.")
         self.update()
 
     def set_division(self, division) -> None:
+        """Set the division ratio for overlay mode and update the widget.
+
+        Args:
+            division: Division ratio (float, 0.0 to 1.0) indicating
+                      the position of the divider.
+
+        """
         self.division = division
         self.update()
 
     def paintEvent(self, event) -> None:
+        """Render the overlay video display with the division between frames.
+
+        Args:
+            event: The paint event triggering the update.
+
+        """
         super().paintEvent(event)
         if self.frame1 is None or self.frame2 is None:
             return
@@ -141,6 +207,12 @@ class OverlayVideoLabel(QWidget):
         )
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        """Handle mouse press events to enable dragging of the divider.
+
+        Args:
+            event: The mouse press event.
+
+        """
         if event.button() == Qt.MouseButton.LeftButton:
             widget_width = self.width()
             widget_height = self.height()
@@ -204,6 +276,12 @@ class OverlayVideoLabel(QWidget):
             event.ignore()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        """Handle mouse move events for dragging or cursor updates.
+
+        Args:
+            event: The mouse move event.
+
+        """
         if self.dragging:
             widget_width = self.width()
             widget_height = self.height()
@@ -326,6 +404,12 @@ class OverlayVideoLabel(QWidget):
             event.ignore()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        """Handle mouse release events to stop dragging the divider.
+
+        Args:
+            event: The mouse release event.
+
+        """
         if event.button() == Qt.MouseButton.LeftButton and self.dragging:
             self.dragging = False
             self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
@@ -337,7 +421,45 @@ class OverlayVideoLabel(QWidget):
 
 
 class VideoCompareApp(QMainWindow):
+    """Main application class for the video comparison tool.
+
+    This class manages the user interface and coordinates video playback,
+    frame updates, and interaction between different components. Users can load
+    videos, toggle between comparison modes, and control playback.
+
+    Attributes:
+        cap1: OpenCV VideoCapture object for the first video.
+        cap2: OpenCV VideoCapture object for the second video.
+        timer: QTimer for managing frame updates during playback.
+        is_paused: Boolean indicating whether playback is paused.
+        is_overlay: Boolean indicating whether overlay mode is active.
+        single_video_mode: Boolean indicating whether only one video is loaded.
+        seeking: Boolean indicating whether the user is seeking via the slider.
+
+    Methods:
+        init_ui: Sets up the user interface layout and widgets.
+        toggle_mode: Toggles between overlay and side-by-side display modes.
+        load_videos: Opens file dialogs to load video files.
+        display_initial_frames: Displays the initial frames of loaded videos.
+        display_frame: Converts and displays a single video frame in a QLabel.
+        play_videos: Starts video playback.
+        pause_videos: Pauses video playback.
+        stop_videos: Stops video playback and resets to the initial position.
+        update_frames: Updates frames during playback and synchronizes videos.
+        seek_videos: Seeks to a specific position in the videos.
+        start_seek: Pauses playback when the user starts seeking.
+        end_seek: Resumes playback after seeking.
+        on_division_changed: Handles updates when the overlay divider is moved.
+        closeEvent: Releases video resources when the application is closed.
+
+    """
+
     def __init__(self) -> None:
+        """Initialize the video comparison application.
+
+        Sets up the user interface, initializes video-related variables,
+        and configures playback controls.
+        """
         super().__init__()
         self.setWindowTitle("Video Compare")
         self.resize(1200, 700)  # Set a reasonable default size
@@ -481,6 +603,12 @@ class VideoCompareApp(QMainWindow):
     # Removed resizeEvent as it's not essential and can cause performance issues
 
     def toggle_mode(self, state) -> None:
+        """Switch between overlay mode and side-by-side mode.
+
+        Args:
+            state: The checkbox state indicating the selected mode.
+
+        """
         if state == Qt.CheckState.Checked.value:
             if not self.cap1:
                 QMessageBox.warning(
@@ -501,6 +629,7 @@ class VideoCompareApp(QMainWindow):
         self.display_initial_frames()
 
     def load_videos(self) -> None:
+        """Open file dialogs to load one or two video files and initialize playback."""
         # Open file dialog to select the first video
         video1_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -610,6 +739,7 @@ class VideoCompareApp(QMainWindow):
         self.display_initial_frames()
 
     def display_initial_frames(self) -> None:
+        """Display the initial frames from the loaded videos."""
         if not self.cap1:
             print("Display Initial Frames: Video capture not initialized.")
             return
@@ -667,6 +797,13 @@ class VideoCompareApp(QMainWindow):
             self.cap2.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
     def display_frame(self, frame, label) -> None:
+        """Convert a video frame to QImage and display it in the specified QLabel.
+
+        Args:
+            frame: The video frame (numpy array in BGR format).
+            label: The QLabel widget to display the frame.
+
+        """
         try:
             # Convert BGR to RGB
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -703,6 +840,7 @@ class VideoCompareApp(QMainWindow):
             )
 
     def play_videos(self) -> None:
+        """Start video playback at the current position."""
         if not self.cap1:
             QMessageBox.warning(
                 self,
@@ -743,6 +881,7 @@ class VideoCompareApp(QMainWindow):
         self.stop_button.setEnabled(True)
 
     def pause_videos(self) -> None:
+        """Pause the video playback."""
         if self.timer.isActive():
             self.timer.stop()
             self.is_paused = True
@@ -751,6 +890,7 @@ class VideoCompareApp(QMainWindow):
             print("Timer paused")
 
     def stop_videos(self) -> None:
+        """Stop the video playback and reset to the initial position."""
         if self.cap1:
             self.timer.stop()
             self.is_paused = False
@@ -773,6 +913,7 @@ class VideoCompareApp(QMainWindow):
             self.stop_button.setEnabled(False)
 
     def update_frames(self) -> None:
+        """Update the video frames for playback and handle frame synchronization."""
         try:
             if self.single_video_mode:
                 ret1, frame1 = self.cap1.read()
@@ -856,6 +997,12 @@ class VideoCompareApp(QMainWindow):
 
     # Updated seekbar-related methods
     def seek_videos(self, position) -> None:
+        """Seek the videos to a specific position.
+
+        Args:
+            position: The position in milliseconds to seek to.
+
+        """
         try:
             if self.cap1:
                 print(f"Seekbar moved to position: {position / 1000} seconds")
@@ -923,7 +1070,12 @@ class VideoCompareApp(QMainWindow):
         print(f"Divider set to {division * 100:.2f}%")
 
     def closeEvent(self, event) -> None:
-        # Release video captures if they exist
+        """Release video resources when the application window is closed.
+
+        Args:
+            event: The close event.
+
+        """
         if self.cap1:
             self.cap1.release()
         if self.cap2:
