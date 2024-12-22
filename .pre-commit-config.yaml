@@ -1,0 +1,39 @@
+# .pre-commit-config.yaml
+
+repos:
+  # Pre-commit's own repository for general-purpose hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0  # Use the latest stable version
+    hooks:
+      - id: trailing-whitespace
+        description: Removes trailing whitespace
+      - id: end-of-file-fixer
+        description: Ensures files end with a newline
+      - id: check-yaml
+        description: Validates YAML files
+      - id: check-added-large-files
+        description: Prevents adding large files accidentally
+        args: ['--maxkb=500']  # Adjust the size limit as needed
+
+  # Ruff Hook for linting and formatting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.8.4
+    hooks:
+      # Run the linter.
+      - id: ruff
+        args: [ --fix ]
+      # Run the formatter.
+      - id: ruff-format
+
+  # Mypy Hook for type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.0  # Ensure this matches the installed version
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: mypy
+        language: python
+        types: [python]
+        additional_dependencies: ['mypy==1.14.0']
+        args: ["--config-file", "pyproject.toml"]
