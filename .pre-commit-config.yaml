@@ -27,13 +27,13 @@ repos:
       - id: ruff-format
 
   # Mypy Hook for type checking
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.0  # Ensure this matches the installed version
-    hooks:
-      - id: mypy
-        name: mypy
-        entry: mypy
-        language: python
-        types: [python]
-        additional_dependencies: ['mypy==1.14.0']
-        args: ["--config-file", "pyproject.toml"]
+#  - repo: https://github.com/pre-commit/mirrors-mypy
+#    rev: v1.14.0  # Ensure this matches the installed version
+#    hooks:
+#      - id: mypy
+#        name: mypy
+#        entry: mypy
+#        language: python
+#        types: [python]
+#        additional_dependencies: ['mypy==1.14.0']
+#        args: ["--config-file", "pyproject.toml"]

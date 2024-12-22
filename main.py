@@ -1,4 +1,5 @@
-"""Video Comparison Application with PyQt6 and OpenCV.
+"""
+Video Comparison Application with PyQt6 and OpenCV.
 
 This application provides an interface for comparing two videos side-by-side
 or in overlay mode. Users can load one or two videos, toggle between comparison
@@ -19,13 +20,23 @@ Classes:
 
 """
 
-import logging  # For logging exceptions
-import os  # For file name extraction
+import logging
 import sys
+from pathlib import Path
 
 import cv2
+import numpy as np
 from PyQt6.QtCore import QPoint, QRect, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QCursor, QImage, QMouseEvent, QPainter, QPixmap
+from PyQt6.QtGui import (
+    QCloseEvent,
+    QColor,
+    QCursor,
+    QImage,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPixmap,
+)
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -44,13 +55,14 @@ from PyQt6.QtWidgets import (
 # Configure logging
 logging.basicConfig(
     filename="video_compare.log",
-    level=logging.ERROR,
+    level=logging.DEBUG,
     format="%(asctime)s:%(levelname)s:%(message)s",
 )
 
 
 class OverlayVideoLabel(QWidget):
-    """Custom widget for displaying two video frames in overlay mode.
+    """
+    Custom widget for displaying two video frames in overlay mode.
 
     This widget supports splitting the display into two sections, with a draggable
     divider that adjusts the proportion of each frame visible. The user can
@@ -69,10 +81,12 @@ class OverlayVideoLabel(QWidget):
 
     """
 
-    divisionChanged = pyqtSignal(float)  # Signal to emit when division changes
+    # Signal to emit when division changes
+    divisionChanged = pyqtSignal(float)  # noqa: N815
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        """Initialize the overlay video label widget.
+        """
+        Initialize the overlay video label widget.
 
         Args:
             parent: The parent widget, if any.
@@ -88,8 +102,9 @@ class OverlayVideoLabel(QWidget):
         self.dragging = False
         self.handle_width = 10  # Width of the draggable area around the divider
 
-    def set_frames(self, frame1, frame2) -> None:
-        """Set the frames for overlay display and update the widget.
+    def set_frames(self, frame1: np.ndarray, frame2: np.ndarray) -> None:
+        """
+        Set the frames for overlay display and update the widget.
 
         Args:
             frame1: First video frame (numpy array in BGR format).
@@ -98,11 +113,12 @@ class OverlayVideoLabel(QWidget):
         """
         self.frame1 = frame1
         self.frame2 = frame2
-        print("OverlayVideoLabel: Frames set.")
+        logging.debug("OverlayVideoLabel: Frames set.")
         self.update()
 
-    def set_division(self, division) -> None:
-        """Set the division ratio for overlay mode and update the widget.
+    def set_division(self, division: float) -> None:
+        """
+        Set the division ratio for overlay mode and update the widget.
 
         Args:
             division: Division ratio (float, 0.0 to 1.0) indicating
@@ -112,8 +128,9 @@ class OverlayVideoLabel(QWidget):
         self.division = division
         self.update()
 
-    def paintEvent(self, event) -> None:
-        """Render the overlay video display with the division between frames.
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        """
+        Render the overlay video display with the division between frames.
 
         Args:
             event: The paint event triggering the update.
@@ -156,8 +173,8 @@ class OverlayVideoLabel(QWidget):
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
-        except Exception as e:
-            logging.exception(f"Error converting frames: {e}")
+        except Exception:
+            logging.exception("Error converting frames")
             return
 
         # Calculate positions to center the images
@@ -206,8 +223,9 @@ class OverlayVideoLabel(QWidget):
             handle_color,
         )
 
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse press events to enable dragging of the divider.
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        """
+        Handle mouse press events to enable dragging of the divider.
 
         Args:
             event: The mouse press event.
@@ -249,8 +267,8 @@ class OverlayVideoLabel(QWidget):
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
-            except Exception as e:
-                logging.exception(f"Error during mousePressEvent scaling: {e}")
+            except Exception:
+                logging.exception("Error during mousePressEvent scaling")
                 return
 
             # Calculate image area
@@ -275,8 +293,9 @@ class OverlayVideoLabel(QWidget):
             self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
             event.ignore()
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse move events for dragging or cursor updates.
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        """
+        Handle mouse move events for dragging or cursor updates.
 
         Args:
             event: The mouse move event.
@@ -318,8 +337,8 @@ class OverlayVideoLabel(QWidget):
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
-            except Exception as e:
-                logging.exception(f"Error during mouseMoveEvent scaling: {e}")
+            except Exception:
+                logging.exception("Error during mouseMoveEvent scaling")
                 return
 
             # Calculate image area
@@ -382,8 +401,9 @@ class OverlayVideoLabel(QWidget):
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
-            except Exception as e:
-                logging.exception(f"Error during mouseMoveEvent scaling (hover): {e}")
+
+            except Exception:
+                logging.exception("Error during mouseMoveEvent scaling (hover)")
                 self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
                 return
 
@@ -403,8 +423,9 @@ class OverlayVideoLabel(QWidget):
                 self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
             event.ignore()
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse release events to stop dragging the divider.
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        """
+        Handle mouse release events to stop dragging the divider.
 
         Args:
             event: The mouse release event.
@@ -421,7 +442,8 @@ class OverlayVideoLabel(QWidget):
 
 
 class VideoCompareApp(QMainWindow):
-    """Main application class for the video comparison tool.
+    """
+    Main application class for the video comparison tool.
 
     This class manages the user interface and coordinates video playback,
     frame updates, and interaction between different components. Users can load
@@ -455,12 +477,41 @@ class VideoCompareApp(QMainWindow):
     """
 
     def __init__(self) -> None:
-        """Initialize the video comparison application.
+        """
+        Initialize the video comparison application.
 
         Sets up the user interface, initializes video-related variables,
         and configures playback controls.
         """
         super().__init__()
+        self.timer_interval = None
+        self.duration2 = None
+        self.frame_count2 = None
+        self.fps2 = None
+        self.seek_slider = None
+        self.stop_button = None
+        self.pause_button = None
+        self.info_label_2 = None
+        self.info_label_1 = None
+        self.play_button = None
+        self.metadata_layout = None
+        self.load_button = None
+        self.filename_label_2 = None
+        self.filename_label_1 = None
+        self.filenames_layout = None
+        self.overlay_label = None
+        self.overlay_widget = None
+        self.video_label_2 = None
+        self.video2_layout = None
+        self.video_label_1 = None
+        self.video1_layout = None
+        self.side_by_side_widget = None
+        self.stacked_layout = None
+        self.mode_toggle = None
+        self.main_layout = None
+        self.frame_count1 = None
+        self.duration1 = None
+        self.fps1 = None
         self.setWindowTitle("Video Compare")
         self.resize(1200, 700)  # Set a reasonable default size
 
@@ -477,7 +528,14 @@ class VideoCompareApp(QMainWindow):
         # Setup UI
         self.init_ui()
 
-    def init_ui(self) -> None:
+    def init_ui(self) -> None:  # noqa: PLR0915
+        """
+        Initialize the user interface of the application.
+
+        This method sets up the main layout, including the central widget, mode toggle,
+        stacked layouts for video displays, file names and metadata info layouts,
+        controls layout with buttons and seekbar.
+        """
         # Central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -602,8 +660,9 @@ class VideoCompareApp(QMainWindow):
 
     # Removed resizeEvent as it's not essential and can cause performance issues
 
-    def toggle_mode(self, state) -> None:
-        """Switch between overlay mode and side-by-side mode.
+    def toggle_mode(self, state: int) -> None:
+        """
+        Switch between overlay mode and side-by-side mode.
 
         Args:
             state: The checkbox state indicating the selected mode.
@@ -620,15 +679,15 @@ class VideoCompareApp(QMainWindow):
                 return
             self.is_overlay = True
             self.stacked_layout.setCurrentWidget(self.overlay_widget)
-            print("Switched to Overlay Mode")
+            logging.debug("Switched to Overlay Mode")
         else:
             self.is_overlay = False
             self.stacked_layout.setCurrentWidget(self.side_by_side_widget)
-            print("Switched to Side-by-Side Mode")
+            logging.debug("Switched to Side-by-Side Mode")
         # Refresh display to update frames
         self.display_initial_frames()
 
-    def load_videos(self) -> None:
+    def load_videos(self) -> None:  # noqa: PLR0915
         """Open file dialogs to load one or two video files and initialize playback."""
         # Open file dialog to select the first video
         video1_path, _ = QFileDialog.getOpenFileName(
@@ -647,11 +706,12 @@ class VideoCompareApp(QMainWindow):
             filter="Video Files (*.mp4 *.avi *.mkv *.mov)",
         )
 
-        print(f"Video 1: {video1_path}")
+        logging.debug("Video 1: %s", video1_path)
         if video2_path:
-            print(f"Video 2: {video2_path}")
+            logging.debug("Video 2: %s", video2_path)
+
         else:
-            print("Video 2 not provided, using Video 1 for both sides.")
+            logging.debug("Video 2 not provided, using Video 1 for both sides.")
 
         # Release previous captures if any
         if self.cap1:
@@ -673,7 +733,7 @@ class VideoCompareApp(QMainWindow):
                 "Error",
                 "Failed to open the first video. Please check the file and try again.",
             )
-            logging.error(f"Failed to open first video: {video1_path}")
+            logging.error("Failed to open first video: %s", video1_path)
             return
         if not self.single_video_mode and not self.cap2.isOpened():
             QMessageBox.critical(
@@ -681,7 +741,7 @@ class VideoCompareApp(QMainWindow):
                 "Error",
                 "Failed to open the second video. Please check the file and try again.",
             )
-            logging.error(f"Failed to open second video: {video2_path}")
+            logging.error("Failed to open second video: %s", video2_path)
             return
 
         # Retrieve video properties
@@ -699,23 +759,28 @@ class VideoCompareApp(QMainWindow):
             self.duration2 = self.frame_count2 / self.fps2 if self.fps2 else 0
 
         # Update filename and metadata labels
-        filename1 = os.path.basename(video1_path)
-        filename2 = (
-            os.path.basename(video2_path) if video2_path else "N/A (Using Video 1)"
-        )
+        filename1 = Path(video1_path).name
+        filename2 = Path(video2_path).name if video2_path else "N/A (Using Video 1)"
         self.filename_label_1.setText(f"Video 1 Filename: {filename1}")
         self.filename_label_2.setText(f"Video 2 Filename: {filename2}")
 
         self.info_label_1.setText(
-            f"Video 1 Info: Resolution: {int(self.cap1.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))}, FPS: {self.fps1:.2f}, Duration: {self.duration1:.2f} sec",
+            f"Video 1 Info: Resolution: {int(self.cap1.get(cv2.CAP_PROP_FRAME_WIDTH))}x"
+            f"{int(self.cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))}, FPS: {self.fps1:.2f}, "
+            f"Duration: {self.duration1:.2f} sec",
         )
+
         if self.single_video_mode:
             self.info_label_2.setText(
-                f"Video 2 Info: Resolution: {int(self.cap1.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))}, FPS: {self.fps2:.2f}, Duration: {self.duration2:.2f} sec (Split from Video 1)",
+                f"Video 2 Info: Resolution: {int(self.cap1.get(cv2.CAP_PROP_FRAME_WIDTH))}x"  # noqa: E501
+                f"{int(self.cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))}, FPS: {self.fps2:.2f}, "  # noqa: E501
+                f"Duration: {self.duration2:.2f} sec (Split from Video 1)",
             )
         else:
             self.info_label_2.setText(
-                f"Video 2 Info: Resolution: {int(self.cap2.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap2.get(cv2.CAP_PROP_FRAME_HEIGHT))}, FPS: {self.fps2:.2f}, Duration: {self.duration2:.2f} sec",
+                f"Video 2 Info: Resolution: {int(self.cap2.get(cv2.CAP_PROP_FRAME_WIDTH))}x"  # noqa: E501
+                f"{int(self.cap2.get(cv2.CAP_PROP_FRAME_HEIGHT))}, FPS: {self.fps2:.2f}, "  # noqa: E501
+                f"Duration: {self.duration2:.2f} sec",
             )
 
         # Enable playback controls and overlay toggle
@@ -741,25 +806,25 @@ class VideoCompareApp(QMainWindow):
     def display_initial_frames(self) -> None:
         """Display the initial frames from the loaded videos."""
         if not self.cap1:
-            print("Display Initial Frames: Video capture not initialized.")
+            logging.debug("Display Initial Frames: Video capture not initialized.")
             return
 
         ret1, frame1 = self.cap1.read()
 
         if not ret1 or frame1 is None:
-            print("Failed to read frame from the first video.")
+            logging.debug("Failed to read frame from the first video.")
             return
 
         # Handle single-video mode (no second video provided)
         if self.single_video_mode:
             height, width, _ = frame1.shape
 
-            if width < 2:  # Ensure the frame can be split
+            if width < 2:  # Ensure the frame can be split  # noqa: PLR2004
                 logging.error("Frame width too small to split.")
                 QMessageBox.critical(
                     self,
                     "Error",
-                    "Video frame width is too small to split for side-by-side comparison.",
+                    "Video frame width is too small to split for side-by-side comparison.",  # noqa: E501
                 )
                 self.stop_videos()
                 return
@@ -769,10 +834,10 @@ class VideoCompareApp(QMainWindow):
             right_frame = frame1[:, width // 2 :]  # Right half
 
             if self.is_overlay:
-                print("Setting frames for overlay mode.")
+                logging.debug("Setting frames for overlay mode.")
                 self.overlay_label.set_frames(left_frame, right_frame)
             else:
-                print("Setting frames for side-by-side mode.")
+                logging.debug("Setting frames for side-by-side mode.")
                 self.display_frame(left_frame, self.video_label_1)
                 self.display_frame(right_frame, self.video_label_2)
         else:
@@ -780,14 +845,14 @@ class VideoCompareApp(QMainWindow):
             ret2, frame2 = self.cap2.read()
 
             if not ret2 or frame2 is None:
-                print("Failed to read frame from the second video.")
+                logging.debug("Failed to read frame from the second video.")
                 return
 
             if self.is_overlay:
-                print("Setting frames for overlay mode.")
+                logging.debug("Setting frames for overlay mode.")
                 self.overlay_label.set_frames(frame1, frame2)
             else:
-                print("Setting frames for side-by-side mode.")
+                logging.debug("Setting frames for side-by-side mode.")
                 self.display_frame(frame1, self.video_label_1)
                 self.display_frame(frame2, self.video_label_2)
 
@@ -796,8 +861,9 @@ class VideoCompareApp(QMainWindow):
         if not self.single_video_mode:
             self.cap2.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-    def display_frame(self, frame, label) -> None:
-        """Convert a video frame to QImage and display it in the specified QLabel.
+    def display_frame(self, frame: np.ndarray, label: QLabel) -> None:
+        """
+        Convert a video frame to QImage and display it in the specified QLabel.
 
         Args:
             frame: The video frame (numpy array in BGR format).
@@ -825,14 +891,14 @@ class VideoCompareApp(QMainWindow):
             )
             label.setPixmap(pixmap)
         except cv2.error as e:
-            logging.exception(f"OpenCV error during frame display: {e}")
+            logging.exception("OpenCV error during frame display")
             QMessageBox.critical(
                 self,
                 "Error",
                 f"An error occurred while displaying a frame:\n{e!s}",
             )
         except Exception as e:
-            logging.exception(f"Unexpected error during frame display: {e}")
+            logging.exception("Unexpected error during frame display")
             QMessageBox.critical(
                 self,
                 "Error",
@@ -868,12 +934,12 @@ class VideoCompareApp(QMainWindow):
                 "Error",
                 "Invalid FPS detected. Cannot start playback.",
             )
-            logging.error(f"Invalid combined FPS: {combined_fps}")
+            logging.error("Invalid combined FPS: %d", combined_fps)
             return
         self.timer_interval = int(1000 / combined_fps)
         self.timer.start(self.timer_interval)
         self.is_paused = False
-        print(f"Timer started with interval: {self.timer_interval} ms")
+        logging.debug("Timer started with interval: %d ms", self.timer_interval)
 
         # Update button states
         self.play_button.setEnabled(False)
@@ -887,14 +953,14 @@ class VideoCompareApp(QMainWindow):
             self.is_paused = True
             self.play_button.setEnabled(True)
             self.pause_button.setEnabled(False)
-            print("Timer paused")
+            logging.debug("Timer paused")
 
     def stop_videos(self) -> None:
         """Stop the video playback and reset to the initial position."""
         if self.cap1:
             self.timer.stop()
             self.is_paused = False
-            print("Timer stopped and videos reset")
+            logging.debug("Timer stopped and videos reset")
 
             # Reset frame positions to start
             self.cap1.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -912,13 +978,13 @@ class VideoCompareApp(QMainWindow):
             self.pause_button.setEnabled(False)
             self.stop_button.setEnabled(False)
 
-    def update_frames(self) -> None:
+    def update_frames(self) -> None:  # noqa: PLR0912, PLR0915
         """Update the video frames for playback and handle frame synchronization."""
         try:
             if self.single_video_mode:
                 ret1, frame1 = self.cap1.read()
                 if not ret1:
-                    print("End of Video 1 reached.")
+                    logging.debug("End of Video 1 reached.")
                     self.stop_videos()
                     return
 
@@ -935,12 +1001,15 @@ class VideoCompareApp(QMainWindow):
                 # Calculate current position in milliseconds
                 pos1 = self.cap1.get(cv2.CAP_PROP_POS_MSEC)
                 current_pos = pos1
-                print(f"Current playback position: {current_pos / 1000:.2f} seconds")
+                logging.debug(
+                    "Current playback position: %.2f seconds",
+                    current_pos / 1000,
+                )
 
                 # Update seekbar without triggering the sliderMoved signal
-                self.seek_slider.blockSignals(True)
+                self.seek_slider.blockSignals(True)  # noqa: FBT003
                 self.seek_slider.setValue(int(current_pos))
-                self.seek_slider.blockSignals(False)
+                self.seek_slider.blockSignals(False)  # noqa: FBT003
 
                 # Check if video has ended
                 if pos1 >= self.duration1 * 1000:
@@ -960,14 +1029,15 @@ class VideoCompareApp(QMainWindow):
                     pos1 = self.cap1.get(cv2.CAP_PROP_POS_MSEC)
                     pos2 = self.cap2.get(cv2.CAP_PROP_POS_MSEC)
                     current_pos = min(pos1, pos2)
-                    print(
-                        f"Current playback position: {current_pos / 1000:.2f} seconds",
+                    logging.debug(
+                        "Current playback position: %.2f seconds",
+                        current_pos / 1000.0,
                     )
 
                     # Update seekbar without triggering the sliderMoved signal
-                    self.seek_slider.blockSignals(True)
+                    self.seek_slider.blockSignals(True)  # noqa: FBT003
                     self.seek_slider.setValue(int(current_pos))
-                    self.seek_slider.blockSignals(False)
+                    self.seek_slider.blockSignals(False)  # noqa: FBT003
 
                     # Check if any video has ended
                     if (pos1 >= self.duration1 * 1000) or (
@@ -979,7 +1049,7 @@ class VideoCompareApp(QMainWindow):
                     self.stop_videos()
 
         except cv2.error as e:
-            logging.exception(f"OpenCV error during frame update: {e}")
+            logging.exception("OpenCV error during frame update")
             self.stop_videos()
             QMessageBox.critical(
                 self,
@@ -987,7 +1057,7 @@ class VideoCompareApp(QMainWindow):
                 f"An error occurred during playback:\n{e!s}",
             )
         except Exception as e:
-            logging.exception(f"Unexpected error during frame update: {e}")
+            logging.exception("Unexpected error during frame update")
             self.stop_videos()
             QMessageBox.critical(
                 self,
@@ -996,8 +1066,9 @@ class VideoCompareApp(QMainWindow):
             )
 
     # Updated seekbar-related methods
-    def seek_videos(self, position) -> None:
-        """Seek the videos to a specific position.
+    def seek_videos(self, position: float) -> None:
+        """
+        Seek the videos to a specific position.
 
         Args:
             position: The position in milliseconds to seek to.
@@ -1005,7 +1076,10 @@ class VideoCompareApp(QMainWindow):
         """
         try:
             if self.cap1:
-                print(f"Seekbar moved to position: {position / 1000} seconds")
+                logging.debug(
+                    "Seekbar moved to position: %.3f seconds",
+                    position / 1000,
+                )
                 # Set the position in milliseconds
                 self.cap1.set(cv2.CAP_PROP_POS_MSEC, position)
                 if not self.single_video_mode and self.cap2:
@@ -1033,14 +1107,14 @@ class VideoCompareApp(QMainWindow):
                             self.display_frame(frame2, self.video_label_2)
 
         except cv2.error as e:
-            logging.exception(f"OpenCV error during seeking: {e}")
+            logging.exception("OpenCV error during seeking")
             QMessageBox.critical(
                 self,
                 "Error",
                 f"An error occurred while seeking:\n{e!s}",
             )
         except Exception as e:
-            logging.exception(f"Unexpected error during seeking: {e}")
+            logging.exception("Unexpected error during seeking")
             QMessageBox.critical(
                 self,
                 "Error",
@@ -1052,7 +1126,7 @@ class VideoCompareApp(QMainWindow):
         if self.timer.isActive():
             self.timer.stop()
             self.is_paused = True
-            print("Playback paused for seeking")
+            logging.debug("Playback paused for seeking")
 
     def end_seek(self) -> None:
         """Resume playback after seek operation."""
@@ -1062,15 +1136,16 @@ class VideoCompareApp(QMainWindow):
             and self.timer_interval > 0
         ):
             self.timer.start(self.timer_interval)
-            print("Playback resumed after seeking")
+            logging.debug("Playback resumed after seeking")
 
-    def on_division_changed(self, division) -> None:
+    def on_division_changed(self, division: float) -> None:
         """Handle division changes from the OverlayVideoLabel."""
         # This method can be used to update other UI elements if needed
-        print(f"Divider set to {division * 100:.2f}%")
+        logging.debug("Divider set to %.2f%%", division * 100)
 
-    def closeEvent(self, event) -> None:
-        """Release video resources when the application window is closed.
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        """
+        Release video resources when the application window is closed.
 
         Args:
             event: The close event.

@@ -28,7 +28,7 @@ dev = [
 # ==============================
 [tool.ruff]
 lint.select = ["ALL"]
-lint.ignore = ["E203"]
+lint.ignore = ["E203", "D203", "D212", "ISC001", "COM812"]
 line-length = 88
 exclude = ["build/", "dist/", ".venv/"]
 
